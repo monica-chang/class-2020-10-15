@@ -33,7 +33,8 @@ Recall how we (mostly) finished on Tuesday:
 tibble(urn_red = seq(100, 700, by = 100)) %>% 
   mutate(paddle_red = map(urn_red, ~ rbinom(n = 100, size = 25, prob = ./1000))) %>% 
   unnest(paddle_red) %>% 
-  sample_n(10)
+  sample_n(10) %>%
+  ggplot(aes(x = paddle_red, y = urn_red)) + geom_point()
 ```
 
 `urn_red` is the assumed number of red beads in the urn, out of 1,000. By assumption, we do not know the true number. Here, we are creating the joint distribution of models-that-might-be-true and results-we-might-see. That is, p(models, data). The above code gets us started in that process, but, obviously, we need to consider many more possible truths. There might be 0 or 1 or 2 or . . . red beads in the urn, after all. `n = 100` means that we are running 100 experiments at a given level of assumed number of red beads in the urn. `unnest()` explodes that list into a long tidy tibble, which will be much easier to work with.
@@ -46,19 +47,51 @@ tibble(urn_red = seq(100, 700, by = 100)) %>%
 
 Interpret the meaning of the graphic.
 
+```{r sc1}
+x <- tibble(urn_red = seq(0, 1000, by = 1)) %>% 
+  mutate(paddle_red = map(urn_red, ~ rbinom(n = 100, size = 25, prob = ./1000))) %>% 
+  unnest(paddle_red) 
 
+x %>% 
+  ggplot(aes(x = paddle_red, y = urn_red)) + 
+    geom_point(alpha = 0.01) +
+    labs(title = "Joint Distribution of Red Beads in Paddle and Urn",
+         x = "Number of red beads in paddle",
+         y = "Number of red beads in urn")
+```
 
 
 ## Scene 2
 
 **Prompt:** Using the joint distribution we calculated in Scene 5 as input, calculate your posterior probability density for the number of red beads in the urn, given that that 10 red were sampled in our paddle of 25.
 
+```{r sc2}
+post <- x %>%
+  filter(paddle_red == 10) %>%
+  group_by(urn_red) %>%
+  summarize(total = n(), .groups = "drop") %>%
+  mutate(probs = total/sum(total))
 
+post %>%
+  ggplot(aes(x = urn_red, y = probs)) + 
+    geom_col() +   
+    labs(title = "Posterior Probability Distribution of Red Beads in Urn",
+         x = "Number of Red Beads",
+         y = "Probability")
+```
 
 
 ## Scene 3
 
 **Prompt:** With our posterior probability distribution, we can now forecast outcomes which we have not yet seen. For example, what is the probability of getting more than 3 reds if we sample 20 from the urn, given our posterior? (That is, we are pretending that we don't know the number of red beads in the urn.)
 
-
-
+```{r sc3}
+post %>% 
+  mutate(new_reds = map(urn_red, 
+                            ~ rbinom(n = 100, 
+                                     size = 20,
+                                     prob = ./1000))) %>% 
+  unnest(new_reds) %>% 
+  mutate(res = ifelse(new_reds > 3, TRUE, FALSE)) %>% 
+  summarise(final = weighted.mean(res, probs))
+```
